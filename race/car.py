@@ -29,7 +29,7 @@ class Car:
         self.free_deceleration = 2.0
         self.break_deceleration = 7.0
 
-        self.rotated = None
+        self.rotated = pygame.transform.rotate(self.car_image, self.angle)
         self.center_position = Vector2(0.0, 0.0)
 
     def update(self, dt):

@@ -7,7 +7,11 @@ GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 
 if __name__ == "__main__":
-    race_game = game.Game(1280, 720, auto=False)
+    # Declare game
+    race_game = game.Game(1280, 720, auto=True)
 
-    print(f'')
-    race_game.run()
+    # Build map
+    race_game.make_track()
+
+    # Run car in builded map
+    race_game.run_car()
