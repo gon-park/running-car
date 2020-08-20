@@ -4,7 +4,6 @@ import random
 import math
 
 from race import car as c
-from math import sin, radians, degrees, copysign
 
 # Color
 WHITE = (255, 255, 255)
@@ -15,84 +14,43 @@ BLUE = (0, 0, 180)
 RED = (255, 0, 0)
 
 # Action State
-BUILD1 = 1
-BUILD2 = 2
 RUN = 3
 EXIT = 4
 
 # Track
-ALLOWED_DISTANCE = 50
-TRACK_WIDHT = 3
+GUIDE_WIDHT = 1
+
+# Car
+START_POINT = (30, 330)
+MAX_BEAM_LEN = 100
 
 
 class Game:
-    def __init__(self, width, height, ticks=30, auto=True):
+    def __init__(self, width, height, ticks=60, auto=True):
         pygame.init()
         pygame.display.set_caption("Car tutorial")
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        map_path = os.path.join(current_dir, "simple_map.png")
+        self.map_surface = pygame.image.load(map_path)
+        self.map_mask = pygame.mask.from_surface(self.map_surface)
+
+        mask_fx = pygame.mask.from_surface(pygame.transform.flip(self.map_surface, True, False))
+        mask_fy = pygame.mask.from_surface(pygame.transform.flip(self.map_surface, False, True))
+        mask_fx_fy = pygame.mask.from_surface(pygame.transform.flip(self.map_surface, True, True))
+        self.flipped_masks = [[self.map_mask, mask_fy], [mask_fx, mask_fx_fy]]
 
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((self.width, self.height))
         self.auto = auto
-        self.action_status = BUILD1
-        self.car = c.Car(self.width / 10, self.height / 10)
+        self.action_status = RUN
+        self.car = c.Car(*START_POINT)
         self.dt = 0
         self.ticks = ticks
         self.clock = pygame.time.Clock()
-        self.track_position = ([], [])
 
-    def make_track(self):
-        self.draw_screen()
-        mousedown = False
-        distance = 10000
-        track_index = 0
-
-        while self.action_status is BUILD1 or self.action_status is BUILD2:
-            event = pygame.event.poll()
-            if event.type == pygame.QUIT:
-                self.action_status = EXIT
-
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mousedown = True
-
-            elif event.type == pygame.MOUSEBUTTONUP:
-                mousedown = False
-                print(f'Map draw end position: {event.pos}')
-                distance = math.sqrt(
-                    ((self.track_position[track_index][0][0]-event.pos[0])**2)+((self.track_position[track_index][0][1]-event.pos[1])**2))
-                print(f'Distance between start and end: {distance}')
-
-                if distance < ALLOWED_DISTANCE:
-                    if track_index == 0:
-                        track_index = 1
-                    else:
-                        self.action_status = RUN
-                        break
-
-                self.track_position[track_index].clear()
-                self.draw_screen()
-                if track_index == 1:
-                    pygame.draw.lines(self.screen, RED, False,
-                                      self.track_position[0], TRACK_WIDHT)
-                    pygame.draw.line(
-                        self.screen, RED, self.track_position[0][0], self.track_position[0][-1], TRACK_WIDHT)
-                distance = 10000
-
-            elif event.type == pygame.MOUSEMOTION:
-                if mousedown:
-                    if len(self.track_position[track_index]) == 0:
-                        print(f'Map draw start position: {event.pos}')
-                    self.track_position[track_index].append(event.pos)
-
-                    if len(self.track_position[track_index]) > 1:
-                        if math.sqrt(((self.track_position[track_index][0][0]-event.pos[0])**2)+((self.track_position[track_index][0][1]-event.pos[1])**2)) < ALLOWED_DISTANCE:
-                            pygame.draw.line(
-                                self.screen, BLUE, self.track_position[track_index][-2], self.track_position[track_index][-1], TRACK_WIDHT)
-                        else:
-                            pygame.draw.line(
-                                self.screen, RED, self.track_position[track_index][-2], self.track_position[track_index][-1], TRACK_WIDHT)
-
-            pygame.display.update()
+        self.beam_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
     def run_car(self):
         while self.action_status is RUN:
@@ -113,7 +71,7 @@ class Game:
             self.car.update(self.dt)
 
             # Draw
-            self.draw_screen(car=self.car, track=self.track_position)
+            self.draw_screen()
 
             self.clock.tick(self.ticks)
 
@@ -122,8 +80,8 @@ class Game:
     def process_moving_car(self):
         if self.auto is True:
             # Car Acceleration
-            self.car.acceleration = random.randrange(int(-self.car.max_acceleration / 2),
-                                                     self.car.max_acceleration)
+            self.car.acceleration = random.randrange(int(-self.car.max_acceleration / 4),
+                                                     int(self.car.max_acceleration))
             # Car Steering
             self.car.steering += random.randrange(-self.car.max_steering,
                                                   self.car.max_steering) * self.dt
@@ -146,14 +104,14 @@ class Game:
             elif pressed[pygame.K_SPACE]:
                 if abs(self.car.velocity.x) > self.dt * self.car.break_deceleration:
                     self.car.acceleration = - \
-                        copysign(self.car.break_deceleration,
+                        math.copysign(self.car.break_deceleration,
                                  self.car.velocity.x)
                 else:
                     self.car.acceleration = -self.car.velocity.x / self.dt
             else:
                 if abs(self.car.velocity.x) > self.dt * self.car.free_deceleration:
                     self.car.acceleration = - \
-                        copysign(self.car.free_deceleration,
+                        math.copysign(self.car.free_deceleration,
                                  self.car.velocity.x)
                 else:
                     if self.dt != 0:
@@ -172,55 +130,76 @@ class Game:
         self.car.steering = max(-self.car.max_steering,
                                 min(self.car.steering, self.car.max_steering))
 
-        print(f'car.accel: {self.car.acceleration}')
-        print(f'car.steering: {self.car.steering}')
+        # print(f'car.accel: {self.car.acceleration}')
+        # print(f'car.steering: {self.car.steering}')
 
     def check_and_reset_position(self):
         is_reset = False
 
         if self.car.real_position.x > self.width:
             # car.position.x = 0.0
-            self.car.__init__(self.width / 10, self.height /
-                              10, angle=random.randrange(0, 360))
+            self.car.__init__(*START_POINT, angle=random.randrange(0, 360))
             is_reset = True
         elif self.car.position.x < 0.0:
             # car.position.x = float(self.width / ppu)
-            self.car.__init__(self.width / 10, self.height /
-                              10, angle=random.randrange(0, 360))
+            self.car.__init__(*START_POINT, angle=random.randrange(0, 360))
             is_reset = True
 
         if self.car.real_position.y > self.height:
             # car.position.y = 0.0
-            self.car.__init__(self.width / 10, self.height /
-                              10, angle=random.randrange(0, 360))
+            self.car.__init__(*START_POINT, angle=random.randrange(0, 360))
             is_reset = True
         elif self.car.position.y < 0.0:
             # car.position.y = float(self.height / ppu)
-            self.car.__init__(self.width / 10, self.height /
-                              10, angle=random.randrange(0, 360))
+            self.car.__init__(*START_POINT, angle=random.randrange(0, 360))
             is_reset = True
 
         return is_reset
 
-    def draw_screen(self, background=BLACK, car=None, track=None):
+    def draw_screen(self, background=BLACK):
         # Draw background
         self.screen.fill(background)
 
         # draw track
-        if track:
-            pygame.draw.lines(self.screen, RED, False, track[0], TRACK_WIDHT)
-            pygame.draw.lines(self.screen, BLUE, False, track[1], TRACK_WIDHT)
-            pygame.draw.line(
-                self.screen, RED, track[0][0], track[0][-1], TRACK_WIDHT)
-            pygame.draw.line(
-                self.screen, BLUE, track[1][0], track[1][-1], TRACK_WIDHT)
+        self.screen.blit(self.map_surface, self.map_surface.get_rect())
 
-        # if car:
         # Draw car
         self.screen.blit(self.car.rotated, self.car.real_position)
 
-        # Draw middle circle
-        print(f'position: {self.car.center_position}')
-        pygame.draw.circle(self.screen, RED, self.car.center_position, 4, 0)
+        # Draw line
+        self.draw_beam(self.car.center_position, self.car.angle)
+        self.draw_beam(self.car.center_position, self.car.angle + 45)
+        self.draw_beam(self.car.center_position, self.car.angle - 45)
 
-        pygame.display.flip()
+        pygame.display.update()
+
+    def draw_beam(self, start_position, angle):
+        # c = math.cos(math.radians(angle))
+        # s = math.sin(math.radians(angle))
+
+        # flip_x = c < 0
+        # flip_y = s < 0
+        # filpped_mask = self.flipped_masks[flip_x][flip_y]
+
+        x_dest = start_position.x + MAX_BEAM_LEN * math.cos(-math.radians(angle))
+        y_dest = start_position.y + MAX_BEAM_LEN * math.sin(-math.radians(angle))
+
+        self.beam_surface.fill((0, 0, 0, 0))
+
+        # draw a single beam to the beam surface based on computed final point
+        pygame.draw.line(self.beam_surface, BLUE, start_position, (x_dest, y_dest))
+        beam_mask = pygame.mask.from_surface(self.beam_surface)
+
+        # find overlap between "global mask" and current beam mask
+        # offset_x = self.width - start_position.x if flip_x else start_position.x
+        # offset_y = self.height - start_position.y if flip_y else start_position.y
+        hit = self.map_mask.overlap(beam_mask, (0, 0))
+        if hit is not None:
+            # hx = self.width - start_position.x if flip_x else start_position.x
+            # hy = self.height - start_position.y if flip_y else start_position.y
+            # hit_pos = (hx, hy)
+            pygame.draw.line(self.screen, WHITE, start_position, hit)
+            pygame.draw.circle(self.screen, RED, hit, 3)
+            # pygame.draw.circle(self.screen, RED, hit_pos, 3)
+        else:
+            pygame.draw.line(self.screen, WHITE, start_position, (x_dest, y_dest))
